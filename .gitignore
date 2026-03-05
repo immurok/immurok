@@ -1,0 +1,55 @@
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Build artifacts ===
+.build/
+build/
+dist/
+*.o
+*.so
+*.dylib
+*.a
+*.d
+
+# === App (macOS / Swift) ===
+app-macos/.build/
+app-macos/.swiftpm/
+app-macos/Resources/*.pkg
+app-macos/immurok.app/
+app-macos/.sign-identity
+
+# === Firmware (CH592F) ===
+firmware/SDK/
+firmware/build/
+ota/iap/build/
+ota/jumpapp/build/
+
+
+# === OTA keys (per-machine, never commit) ===
+firmware/APP/include/ota_keys.h
+ota/ota_keys.py
+
+# === Python ===
+__pycache__/
+*.pyc
+*.egg-info/
+venv/
+.venv/
+
+# === Website ===
+website/.wrangler/
+website-v2/.wrangler/
+node_modules/
+
+# === IDE ===
+.vscode/
+.idea/
+*.xcworkspace/
+xcuserdata/
+
+# === Misc ===
+*.log
+*.tmp
+*.swp
+*~
