@@ -1,6 +1,10 @@
 # immurok
 
-Wireless fingerprint authenticator for Mac and Linux.
+<p align="center">
+  <img src="assets/device.png" alt="immurok" width="320">
+</p>
+
+**Wireless fingerprint authenticator for Mac and Linux.**
 
 immurok is an open-source hardware security key with a built-in fingerprint sensor. It brings biometric authentication to every Mac and Linux machine — desktops, clamshell laptops, and headless servers — over Bluetooth LE.
 
