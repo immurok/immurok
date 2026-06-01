@@ -1,16 +1,18 @@
 # immurok
 
-Wireless fingerprint authenticator for Mac and Linux.
+Wireless fingerprint authenticator for Mac, Linux, and your AI coding agent.
 
-immurok is an open-source hardware security key with a built-in fingerprint sensor. It brings biometric authentication to every Mac and Linux machine — desktops, clamshell laptops, and headless servers — over Bluetooth LE.
+immurok is an open-source hardware security key with a built-in fingerprint sensor. It brings biometric authentication to every Mac and Linux machine — desktops, clamshell laptops, headless servers — and to AI coding agents that run commands on your behalf, all over Bluetooth LE.
 
-**One touch to unlock your screen, authorize sudo, sign SSH commits, and more.**
+**One touch to unlock your screen, authorize sudo, sign SSH commits, and gate the privileged commands your AI agent wants to run.**
 
 ## Features
 
 - **Screen unlock** — Touch to unlock macOS lock screen and Linux login
 - **sudo / polkit** — Fingerprint replaces password for privilege escalation
 - **SSH agent** — On-device ECDSA key generation and signing (private key never leaves the device)
+- **AI agent authorization** — Wrap an agent's subprocess with `imk run --agent --`. One fingerprint touch authorizes sudo + SSH signing + secret reads for the entire wrapped command. Reject and the subprocess gets `SIGTERM`. See [imk-skill](https://github.com/immurok/imk-skill).
+- **Encrypted secret vault** — `imk://api/...`, `imk://otp/...`, `imk://ssh/...` URIs read by the device under fingerprint control. Inject into agent env via `--env-file` without touching disk.
 - **TOTP** — Hardware-backed one-time password generation with Quick Fill (`Ctrl+\`)
 - **API key vault** — Encrypted credential storage with biometric access
 - **Mutual authentication** — ECDH P-256 pairing + HMAC-SHA256 signed notifications
@@ -19,25 +21,45 @@ immurok is an open-source hardware security key with a built-in fingerprint sens
 ## How It Works
 
 ```
-┌──────────────────────┐     BLE      ┌──────────────────┐
-│  Companion App       │◄────────────►│  immurok Device  │
-│  (macOS / Linux)     │   Custom     │  CH592F + ZW3021 │
-│                      │   GATT       │                  │
-│  - BLE manager       │              │  - BLE HID       │
-│  - PAM socket server │              │  - Fingerprint   │
-│  - SSH agent         │              │  - Key storage   │
-│  - Screen unlocker   │              │  - ECDH / HMAC   │
-└──────────┬───────────┘              └──────────────────┘
-           │
-    ┌──────▼──────┐
-    │ PAM module  │
-    │ pam_immurok │
-    └─────────────┘
+                 ┌──────────────────────┐     BLE      ┌──────────────────┐
+                 │  Companion App       │◄────────────►│  immurok Device  │
+                 │  (macOS / Linux)     │   Custom     │  CH592F + ZW3021 │
+  ┌───────────┐  │                      │   GATT       │                  │
+  │ AI agent  │─►│  - BLE manager       │              │  - BLE HID       │
+  │ (Claude   │  │  - PAM socket server │              │  - Fingerprint   │
+  │  Code,    │  │  - SSH agent         │              │  - Key storage   │
+  │  Cursor,  │  │  - Screen unlocker   │              │  - ECDH / HMAC   │
+  │  ...)     │  │  - Agent approval    │              │                  │
+  └───────────┘  │    HUD overlay       │              │                  │
+                 └──────────┬───────────┘              └──────────────────┘
+                            │
+                     ┌──────▼──────┐
+                     │ PAM module  │
+                     │ pam_immurok │
+                     └─────────────┘
 ```
 
 1. The device pairs with the companion app via ECDH P-256 key exchange.
 2. When you touch the fingerprint sensor, the device sends an HMAC-signed notification over BLE.
-3. The companion app verifies the signature and performs the requested action: type a password, respond to a PAM challenge, or sign an SSH request.
+3. The companion app verifies the signature and performs the requested action: type a password, respond to a PAM challenge, sign an SSH request, or release a queued AI-agent subprocess.
+
+### AI agent flow
+
+```bash
+# the agent calls
+imk run --agent -- sudo systemctl restart api
+
+# CLI talks to the companion app's AGENT_APPROVE socket
+# overlay HUD pops, shows the verbatim command + any imk:// URIs in bold
+# you touch the device → fingerprint match → 5-min sudo pre-auth opens
+# subprocess execs; sudo's PAM module sees the pre-auth and skips its prompt
+# SSH key sign / OTP read / API key read inside the same subprocess all
+# satisfy themselves from the AUTH cooldown — one touch, whole subprocess
+
+# rejected / 30 s timeout → subprocess gets SIGTERM, agent exits 77 (EX_NOPERM)
+```
+
+See [imk-skill/SKILL.md](https://github.com/immurok/imk-skill/blob/main/skills/using-imk/SKILL.md) for the canonical wrap pattern, when to wrap (and not), and troubleshooting.
 
 ## Repository Structure
 
@@ -48,7 +70,7 @@ ota/
   iap/                 OTA IAP bootloader (12 KB)
 app-macos/             macOS companion app (Swift, SwiftPM)
   pam/                 macOS PAM module (C, Makefile)
-app-linux/             Linux companion daemon + GUI (Python)
+app-linux-rs/          Linux companion daemon + CLI (Rust)
 hardware/              Schematics, PCB layout, component selection
 docs/
   protocol.md          BLE communication protocol
@@ -74,7 +96,7 @@ See [hardware/README.md](hardware/README.md) for detailed component selection ra
 - **Flash tool**: [`wlink`](https://github.com/ch32-rs/wlink) (`cargo install --git https://github.com/ch32-rs/wlink`)
 - **OTA keys**: `pip3 install cryptography && python3 ota/generate_ota_keys.py`
 - **macOS app**: Xcode Command Line Tools, Swift 5.7+, macOS 13+
-- **Linux app**: Python 3.8+, BlueZ, D-Bus
+- **Linux app**: Rust 1.75+, BlueZ, D-Bus
 
 ### Build
 
@@ -90,7 +112,7 @@ cd app-macos/pam && make
 sudo cp pam_immurok.so /usr/lib/pam/
 
 # Linux
-cd app-linux && make && sudo make install
+cd app-linux-rs && make && sudo make install
 ```
 
 ### First Run (macOS)
@@ -130,6 +152,7 @@ OTA images are encrypted (AES-128-CTR) and signed (HMAC-SHA256). Keys are genera
 | [hardware/README.md](hardware/README.md) | Hardware design — component selection, GPIO pinout, wiring diagram |
 | [ota/README.md](ota/README.md) | OTA update — flash layout, boot sequence, .imfw package format |
 | [app-macos/README.md](app-macos/README.md) | macOS app — build instructions, architecture, source file guide |
+| [imk-skill](https://github.com/immurok/imk-skill) | The AI-agent skill — how Claude Code / Cursor / Codex / Aider / Cline / Gemini CLI use `imk run --agent` to gate privileged commands |
 
 ## Security
 

@@ -11,6 +11,7 @@ dist/
 *.dylib
 *.a
 *.d
+*.su
 
 # === App (macOS / Swift) ===
 app-macos/.build/
