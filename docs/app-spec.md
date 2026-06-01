@@ -50,13 +50,16 @@ The immurok macOS app is a background-resident menu bar application (`LSUIElemen
 
 ### GATT Services
 
-| Service | UUID | Purpose |
-|---------|------|---------|
-| immurok custom | `12340010-...` | Command / response channel |
-| CMD characteristic | `12340011-...` | App → Device (Write with Response) |
-| RSP characteristic | `12340012-...` | Device → App (Notify) |
-| OTA service | `FEE0` / `FEE1` | Firmware update |
+All custom UUIDs are full-entropy random 128-bit (v4) UUIDs — they avoid the Bluetooth Base UUID suffix and the SIG Member range (`0xFE00–0xFFFF`) for compliance. The custom characteristics require a bonded (encrypted) link.
+
+| Service / Characteristic | UUID | Purpose |
+|--------------------------|------|---------|
+| immurok custom service | `45529919-7668-48f9-b9fe-e4eabe6595d9` | Command / response channel |
+| CMD characteristic | `8a537e1f-3992-4b2c-8b77-8d4e778186e1` | App → Device (encrypted Write) |
+| RSP characteristic | `76a1660d-8cf6-44d1-b3fc-70486028e289` | Device → App (encrypted Notify) |
+| OTA service / char | `d29005de-...0430` / `c75f4c30-...d092` | Firmware update |
 | Device Info | `180A` / `2A26` | Firmware version read |
+| Battery | `180F` / `2A19` | Battery level read/notify |
 
 ### Command Protocol
 

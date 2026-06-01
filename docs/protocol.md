@@ -15,25 +15,42 @@ All multi-byte integers are **little-endian** unless noted otherwise.
 
 ### Custom immurok Service
 
-| Attribute | Value |
-|-----------|-------|
-| Service UUID | `12340010-0000-1000-8000-00805f9b34fb` |
-| Command Characteristic | `12340011-...` (Write, max 64 B) |
-| Response Characteristic | `12340012-...` (Notify, max 64 B) |
+All custom UUIDs are full-entropy random 128-bit (v4) UUIDs. They deliberately
+avoid the Bluetooth Base UUID suffix (`-0000-1000-8000-00805f9b34fb`) and the
+SIG Member Service range (`0xFE00–0xFFFF`) for qualification compliance.
+
+| Attribute | UUID | Properties |
+|-----------|------|------------|
+| Service | `45529919-7668-48f9-b9fe-e4eabe6595d9` | — |
+| Command Characteristic | `8a537e1f-3992-4b2c-8b77-8d4e778186e1` | Write (encrypted — bond required), max 64 B |
+| Response Characteristic | `76a1660d-8cf6-44d1-b3fc-70486028e289` | Notify + Read (encrypted — bond required), max 64 B |
+
+The command value uses `ENCRYPT_WRITE` and the response value `ENCRYPT_READ`,
+with `ENCRYPT_WRITE` on the response CCCD — so only a bonded peer (encrypted
+link) can drive the service or subscribe to notifications.
 
 ### Device Information Service (Standard)
 
-| Attribute | Value |
-|-----------|-------|
-| Service UUID | `0x180A` |
+| Attribute | UUID |
+|-----------|------|
+| Service | `0x180A` |
 | Firmware Revision | `0x2A26` (Read) |
+
+### Battery Service (Standard)
+
+| Attribute | UUID |
+|-----------|------|
+| Service | `0x180F` |
+| Battery Level | `0x2A19` (Read/Notify) |
 
 ### OTA Service
 
-| Attribute | Value |
-|-----------|-------|
-| Service UUID | `0xFEE0` |
-| OTA Data Characteristic | `0xFEE1` (Read/Write) |
+Also moved off the SIG Member range (`0xFEE0/0xFEE1`) to random 128-bit UUIDs.
+
+| Attribute | UUID |
+|-----------|------|
+| Service | `d29005de-1391-4a54-8168-bf4e3c080430` |
+| OTA Data Characteristic | `c75f4c30-9a2d-4445-92e0-0e034c53d092` (Read/Write) |
 
 ---
 
@@ -236,10 +253,13 @@ Parameter update is requested 30 s after connection (after macOS completes servi
 
 | Property | Value |
 |----------|-------|
-| Device Name | `immurok IK-1` |
+| Device Name | `immurok IK-1` (in scan response) |
 | Appearance | `0x03C1` (HID Keyboard) |
 | Bonding | Enabled, No Input No Output |
-| Services Advertised | HID (0x1812), Custom (0x12340010...) |
+| Services Advertised | HID (`0x1812`) and Battery (`0x180F`), as 16-bit UUIDs |
+
+The custom 128-bit immurok service is **not** advertised; it is discovered via
+GATT service discovery after connection.
 
 ---
 
