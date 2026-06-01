@@ -1,145 +1,145 @@
-# immurok — 无线指纹认证器
+# immurok — Wireless Fingerprint Authenticator
 
-**一触即达，告别密码。**
+**One touch. No more passwords.**
 
-immurok 是一款小巧的无线蓝牙指纹认证设备，专为 Mac 和 Linux 桌面用户设计。它让你用指纹替代密码，完成屏幕解锁、sudo 授权、SSH 签名等日常操作——只需轻触一下。
-
----
-
-## 为什么需要 immurok？
-
-**你每天输入多少次密码？**
-
-如果你用的是 Mac mini、Mac Studio、Mac Pro，或者 MacBook 外接显示器合盖使用——你没有 Touch ID。苹果唯一的方案是花 ¥1,999 买一把带 Touch ID 的妙控键盘，而且你必须用它当主键盘。如果你习惯了机械键盘，这不是一个选项。
-
-Linux 用户的处境更糟：几乎没有可用的桌面指纹方案。
-
-immurok 解决的就是这个问题。
+immurok is a compact wireless Bluetooth fingerprint authenticator built for Mac and Linux desktop users. It lets you replace passwords with your fingerprint for everyday actions — screen unlock, sudo authorization, SSH signing, and more — with a single touch.
 
 ---
 
-## 核心功能
+## Why immurok?
 
-### 屏幕解锁
-锁屏状态下，触摸传感器即可自动解锁。无需打开盖子，无需敲键盘。支持 macOS 和 Linux。
+**How many times a day do you type your password?**
 
-### sudo 和系统授权
-终端里 `sudo` 弹出密码提示？系统偏好设置要求认证？触摸指纹即可通过。通过自定义 PAM 模块深度集成系统认证体系，不是简单的密码填充。
+If you use a Mac mini, Mac Studio, Mac Pro, or a MacBook closed-lid with an external display, you don't have Touch ID. Apple's only answer is to spend ~$200 on a Magic Keyboard with Touch ID — and you have to use it as your main keyboard. If you're attached to your mechanical keyboard, that's not an option.
 
-### SSH 签名与 Git 提交签名
-设备内置 ECDSA P-256 密钥对，私钥永远不会离开硬件。你可以用指纹签署 Git 提交和 SSH 登录请求——比 GPG key 更方便，比密码更安全。
+Linux users have it worse: there's almost no usable desktop fingerprint solution at all.
 
-### 超长续航
-空闲电流 <30µA，USB-C 充电，待机可达约 3 个月。设备在你不用时自动休眠，触摸瞬间唤醒。
+That's the problem immurok solves.
 
 ---
 
-## 新增：为 AI 编码 agent 而生的人机授权门
+## Core Features
 
-Claude Code、Cursor、Codex、Aider、Cline、Gemini CLI——这些 AI agent 越来越多地在你的机器上**替你执行命令**：跑 `sudo`、`git push`、读 API key、调远程 SSH。但它们没有手指，按不了指纹。
+### Screen Unlock
+While locked, just touch the sensor to unlock automatically. No opening the lid, no typing. Supported on both macOS and Linux.
 
-immurok 提供了一种新的解法：让 agent 把命令"递给你过一下指纹"。
+### sudo and System Authorization
+`sudo` prompting for a password in the terminal? System Settings asking you to authenticate? Touch your fingerprint to approve. Deep integration with the system authentication stack via a custom PAM module — not a simple password autofill.
+
+### SSH Signing and Git Commit Signing
+The device holds a built-in ECDSA P-256 keypair; the private key never leaves the hardware. You can sign Git commits and SSH login requests with your fingerprint — more convenient than a GPG key, more secure than a password.
+
+### Long Battery Life
+Idle current under 30 µA, USB-C charging, up to ~3 months of standby. The device sleeps automatically when idle and wakes the instant you touch it.
+
+---
+
+## New: A Human-in-the-Loop Authorization Gate Built for AI Coding Agents
+
+Claude Code, Cursor, Codex, Aider, Cline, Gemini CLI — these AI agents increasingly **run commands on your machine on your behalf**: `sudo`, `git push`, reading API keys, calling remote SSH. But they don't have fingers, so they can't touch a sensor.
+
+immurok offers a new approach: let the agent "hand a command to you for a fingerprint check."
 
 ```bash
-# agent 即将运行的特权命令、SSH 命令、读密钥的命令，全部包一层
+# Wrap any privileged command, SSH command, or secret-reading command the agent is about to run
 imk run --agent -- sudo systemctl restart api
 imk run --agent -- git push origin main
 imk run --agent --env-file .env -- python deploy.py
 ```
 
-屏幕上会弹出一个 HUD overlay，把命令原样展示给你。**你触摸一下设备**——子进程跑起来；**关闭弹窗或 30 秒不动**——子进程被 `SIGTERM` 干净杀掉，agent 收到退出码 77，知道这是用户拒绝。
+A HUD overlay pops up on screen and shows you the command verbatim. **Touch the device** and the subprocess runs; **close the overlay or stay idle for 30 seconds** and the subprocess is cleanly killed with `SIGTERM`, and the agent receives exit code 77 — signalling a user rejection.
 
-### 为什么这是 AI agent 时代必要的环节
+### Why This Matters in the Age of AI Agents
 
-| 传统做法的痛 | immurok 的解法 |
-|------|------|
-| 给 agent 配 sudo NOPASSWD → 等于把 root 交出去 | 每条特权命令要一次指纹，授权可视、可拒绝 |
-| 给 agent 装 ssh-agent + 长期密钥 → 写代码的 agent 同时拥有 prod 推送权 | SSH 签名走设备 ECDSA 私钥，每次签名要指纹 |
-| 把 API key 直接放进 `.env` → agent 整个对话都能看到 | `OPENAI_KEY=imk://api/openai`，只在 `exec()` 那一刻注入子进程，agent 从来读不到明文 |
-| agent 卡在 sudo 密码提示上无法继续 | 一次指纹同时通过 sudo + SSH + 密钥读取，5 分钟窗口内的整个子进程都不会被打断 |
+| The pain of the traditional approach | The immurok solution |
+|--------------------------------------|----------------------|
+| Give the agent sudo NOPASSWD → effectively handing over root | Each privileged command needs one fingerprint; authorization is visible and refusable |
+| Install ssh-agent + long-lived keys for the agent → your coding agent now also has prod push rights | SSH signing goes through the device's ECDSA private key; every signature needs a fingerprint |
+| Put API keys directly in `.env` → the agent can read them for the entire conversation | `OPENAI_KEY=imk://api/openai` is injected into the subprocess only at the `exec()` moment; the agent never sees the plaintext |
+| The agent stalls forever on a sudo password prompt | One fingerprint clears sudo + SSH + key reads at once; the whole subprocess runs uninterrupted within a 5-minute window |
 
-### 配套的 imk-skill
+### The Companion imk-skill
 
-我们维护了一个开源 [imk-skill](https://github.com/immurok/imk-skill) 仓库——一份单文件的 markdown skill，告诉 agent：什么场景该 wrap、什么时候不要 wrap、被拒绝了怎么干净退出。
+We maintain an open-source [imk-skill](https://github.com/immurok/imk-skill) repository — a single-file markdown skill that tells the agent: when to wrap a command, when not to, and how to exit cleanly when rejected.
 
-- **Claude Code**：`/plugin marketplace add immurok/imk-skill && /plugin install imk-tools@imk`
-- **Cursor / Cline / Continue / Windsurf**：vendor 进 `.cursorrules` / `.clinerules` / `.continue/rules.md`
-- **Codex / Aider / Gemini CLI**：贴进 `AGENTS.md` / `CONVENTIONS.md` / `GEMINI.md`
+- **Claude Code**: `/plugin marketplace add immurok/imk-skill && /plugin install imk-tools@imk`
+- **Cursor / Cline / Continue / Windsurf**: vendor it into `.cursorrules` / `.clinerules` / `.continue/rules.md`
+- **Codex / Aider / Gemini CLI**: paste it into `AGENTS.md` / `CONVENTIONS.md` / `GEMINI.md`
 
-装好之后，agent 在你的 immurok 项目里第一次想跑特权命令，就会自动用 `imk run --agent --` 包起来。你的指纹是它的签到表。
-
----
-
-## 它凭什么做到别人做不到的事？
-
-### 第一个真正的无线蓝牙指纹认证器
-
-市面上的指纹方案要么是笔记本内置的，要么是 USB 有线的。immurok 是第一个通过蓝牙无线连接、同时支持 macOS 和 Linux 的指纹认证设备。你可以把它放在桌面任何位置，不受线缆束缚。
-
-### 同时支持 Mac 和 Linux
-
-不是"支持 Mac，Linux 在计划中"——是现在就支持。macOS 有原生 Swift 菜单栏应用，Linux 有 Rust 守护进程和 TUI 管理界面。两个平台都有完整的 PAM 集成。
-
-### 独立设备，不绑定键盘
-
-苹果的 Touch ID 方案要求你必须使用妙控键盘。immurok 是独立设备，你可以继续用你最喜欢的机械键盘、HHKB、或任何键盘。
-
-### 不只是解锁——深度系统集成
-
-大多数生物识别设备只能做屏幕解锁。immurok 通过 PAM 模块实现了系统级集成：sudo、屏幕锁定、系统授权对话框都能用指纹通过。SSH Agent 功能更是独一无二——用指纹签署代码提交和远程登录。
+Once installed, the first time the agent wants to run a privileged command in your immurok project, it automatically wraps it with `imk run --agent --`. Your fingerprint is its sign-in sheet.
 
 ---
 
-## 安全设计
+## What Lets It Do What Others Can't?
 
-| 原则 | 实现 |
-|------|------|
-| 生物特征不出设备 | 指纹模板存储在传感器内部闪存，主控芯片都无法读取 |
-| 端到端加密通信 | ECDH P-256 密钥交换配对，所有 BLE 消息经 HMAC-SHA256 签名 |
-| 无云端、无账号、无遥测 | 纯本地蓝牙通信，不需要互联网，不收集任何数据 |
-| 固件更新也加密 | OTA 升级包经 AES-128-CTR 加密 + HMAC-SHA256 签名验证 |
-| 开源可审计 | 应用和 PAM 模块完全开源，不信任我们？自己看代码 |
+### The First True Wireless Bluetooth Fingerprint Authenticator
 
----
+Fingerprint solutions on the market are either built into laptops or wired over USB. immurok is the first fingerprint authenticator that connects wirelessly over Bluetooth and supports both macOS and Linux. Put it anywhere on your desk — no cables.
 
-## 与竞品对比
+### Mac and Linux at the Same Time
 
-| 特性 | immurok | 妙控键盘 (Touch ID) | USB 指纹器 |
-|------|---------|---------------------|-----------|
-| 无线连接 | ✅ 蓝牙 LE | ✅ 蓝牙 | ❌ USB 有线 |
-| Mac 桌面支持 | ✅ | ✅ | ⚠️ 部分 |
-| Linux 支持 | ✅ | ❌ | ⚠️ 有限 |
-| sudo / PAM 集成 | ✅ | ❌ | ❌ |
-| SSH 签名 | ✅ | ❌ | ❌ |
-| **AI agent 命令授权** | ✅ `imk run --agent` | ❌ | ❌ |
-| **指纹门控的密钥仓库（API key / OTP）** | ✅ `imk://...` URI | ❌ | ❌ |
-| 独立使用（不绑键盘） | ✅ | ❌ 必须当主键盘 | ✅ |
-| 开源 | ✅ | ❌ | ❌ |
-| 价格 | 远低于 ¥1,999 | ¥1,999 | ¥100-300 |
+Not "supports Mac, Linux planned" — Linux is supported now. macOS has a native Swift menu bar app; Linux has a Rust daemon with a TUI management interface. Both platforms have full PAM integration.
+
+### A Standalone Device, Not Tied to a Keyboard
+
+Apple's Touch ID solution requires you to use the Magic Keyboard. immurok is a standalone device — keep using your favorite mechanical keyboard, HHKB, or whatever you like.
+
+### Not Just Unlocking — Deep System Integration
+
+Most biometric devices only do screen unlock. immurok achieves system-level integration via a PAM module: sudo, screen lock, and system authorization dialogs all work with your fingerprint. The SSH Agent feature is unique — sign code commits and remote logins with a fingerprint.
 
 ---
 
-## 硬件规格
+## Security Design
 
-- **连接方式**：蓝牙 LE 5.4
-- **指纹传感器**：电容式，508 DPI，识别时间 <0.5 秒
-- **误识率 / 拒识率**：<0.001% / <1%
-- **可存储指纹**：最多 10 枚
-- **充电接口**：USB-C
-- **待机续航**：约 3 个月
-- **尺寸**：52 × 32 × 12 mm
-
----
-
-## 适合谁？
-
-- **重度使用 AI 编码 agent 的开发者**——希望 agent 能自主执行命令但不想交出 sudo / SSH / API key 的人
-- 使用 Mac mini / Mac Studio / Mac Pro 的开发者和专业用户
-- MacBook 合盖外接显示器的用户
-- 需要桌面指纹认证的 Linux 用户
-- 重视隐私、不想依赖云服务的安全意识用户
-- 用机械键盘但又想要指纹解锁的人
+| Principle | Implementation |
+|-----------|----------------|
+| Biometrics never leave the device | Fingerprint templates are stored in the sensor's internal flash; even the host MCU cannot read them |
+| End-to-end encrypted communication | ECDH P-256 key exchange for pairing; every BLE message is HMAC-SHA256 signed |
+| No cloud, no account, no telemetry | Purely local Bluetooth communication; no internet required, no data collected |
+| Encrypted firmware updates | OTA images are AES-128-CTR encrypted and verified with HMAC-SHA256 signatures |
+| Open source and auditable | The app and PAM module are fully open source — don't trust us? Read the code |
 
 ---
 
-*2026 年发布。加入等候名单，获取早鸟资格。*
+## Comparison
+
+| Feature | immurok | Magic Keyboard (Touch ID) | USB Fingerprint Reader |
+|---------|---------|---------------------------|------------------------|
+| Wireless | ✅ Bluetooth LE | ✅ Bluetooth | ❌ USB wired |
+| Mac desktop support | ✅ | ✅ | ⚠️ Partial |
+| Linux support | ✅ | ❌ | ⚠️ Limited |
+| sudo / PAM integration | ✅ | ❌ | ❌ |
+| SSH signing | ✅ | ❌ | ❌ |
+| **AI agent command authorization** | ✅ `imk run --agent` | ❌ | ❌ |
+| **FP-gated secret vault (API key / OTP)** | ✅ `imk://...` URI | ❌ | ❌ |
+| Standalone (not tied to a keyboard) | ✅ | ❌ must be main keyboard | ✅ |
+| Open source | ✅ | ❌ | ❌ |
+| Price | Far below a Magic Keyboard | ~$200 | $15–45 |
+
+---
+
+## Hardware Specs
+
+- **Connectivity**: Bluetooth LE 5.4
+- **Fingerprint sensor**: Capacitive, 508 DPI, recognition time < 0.5 s
+- **FAR / FRR**: < 0.001% / < 1%
+- **Stored fingerprints**: up to 10
+- **Charging**: USB-C
+- **Standby life**: ~3 months
+- **Dimensions**: 52 × 32 × 12 mm
+
+---
+
+## Who Is It For?
+
+- **Developers who lean heavily on AI coding agents** — those who want the agent to run commands autonomously without handing over sudo / SSH / API keys
+- Developers and pros on Mac mini / Mac Studio / Mac Pro
+- MacBook users running closed-lid with an external display
+- Linux users who need desktop fingerprint authentication
+- Privacy-conscious, security-minded users who don't want to depend on cloud services
+- Anyone who uses a mechanical keyboard but still wants fingerprint unlock
+
+---
+
+*Launching in 2026. Join the waitlist for early-bird access.*

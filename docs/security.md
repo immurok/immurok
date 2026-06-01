@@ -20,10 +20,20 @@ Device and app establish a shared symmetric key via Elliptic Curve Diffie-Hellma
 
 ### Flow
 
+Pairing is **gated by a physical button press** on the device, so a malicious
+host alone cannot pair without someone physically present. `PAIR_INIT` is also
+rejected (`NEEDS_RESET`) if the device still holds enrolled fingerprints,
+forcing a factory reset before re-pairing.
+
 ```
     App                                    Device (CH592F)
      │                                        │
      │──── PAIR_INIT (0x30) ─────────────────>│
+     │                                        │ Reject if fingerprints exist (NEEDS_RESET)
+     │<──── [0x30][0xF0] (WAIT_BUTTON) ────────│ Blink LED, open 30 s window
+     │                                        │
+     │        (user short-presses button)     │
+     │<──── [0x34][0x01] (button confirmed) ──│
      │                                        │ Generate ephemeral P-256 keypair
      │                                        │ (via TMOS deferred event, ~2 s)
      │<──── [0x30][device_compressed_pub:33B]──│
@@ -44,6 +54,9 @@ Device and app establish a shared symmetric key via Elliptic Curve Diffie-Hellma
      │ Save to Keychain                       │
      │                                        │
 ```
+
+A 30-second timeout (`[0x34][0x00]`) or a long press (`[0x34][0x02]`) aborts the
+pairing before any key material is generated.
 
 ### Deferred Computation
 
@@ -119,6 +132,27 @@ The app verifies the HMAC before accepting the notification. A mismatch causes t
 - Each notification is tied to a physical fingerprint touch.
 - BLE MTU constraints favor compact packets.
 - Brute-forcing 2^64 is infeasible in practice.
+
+---
+
+## Reconnection Verification (Challenge-Response)
+
+After a reconnect, the app must confirm it is talking to the genuine paired
+device before trusting any notification. If the connected peripheral's UUID is
+not already in the verified-device cache, the app issues a challenge:
+
+```
+App  ──── CHALLENGE (0x38) [nonce:8B] ───────────────> Device
+App  <─── [0x38][HMAC-SHA256(shared_key, nonce)[0:8]] ─ Device
+```
+
+The app recomputes the HMAC with its stored `shared_key` and compares. On a
+match it caches the peripheral UUID (`com.immurok.verified-device`) and skips
+the challenge on subsequent reconnects. A mismatch or non-response leaves the
+app in a degraded mode where all privileged operations are disabled.
+
+This binds the shared key to the BLE link on every fresh connection, defeating
+an attacker who clones the device name/UUID but lacks the pairing key.
 
 ---
 
@@ -217,7 +251,7 @@ If the app receives a fingerprint match while no PAM request is pending, it stor
 | Sensor | R559S (capacitive) |
 | Storage | R559S internal flash (not on host MCU) |
 | Capacity | 29 templates |
-| Enrollment | 6 captures merged into one template |
+| Enrollment | 12 captures merged into one template (guided angles) |
 | Module password | Derived from device MAC address |
 
 Templates never leave the sensor module. The host MCU (CH592F) only receives match/no-match results and template IDs. There is no API to extract raw template data over BLE.

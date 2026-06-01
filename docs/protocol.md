@@ -56,10 +56,14 @@ Maximum packet size: 64 bytes.
 | `0x00` | OK | Success |
 | `0x06` | ERR_TIMEOUT | Operation timed out |
 | `0x07` | ERR_FP_NOT_MATCH | Fingerprint did not match |
-| `0x11` | WAIT_FP | Waiting for fingerprint verification |
-| `0xFD` | BUSY / INVALID_STATE | Device busy (OTA in progress) or invalid state (e.g. pairing state machine) |
+| `0x11` | WAIT_FP | Waiting for fingerprint verification (FP gate) |
+| `0xF0` | WAIT_BUTTON | `PAIR_INIT` accepted; waiting for a physical button press |
+| `0xF1` | NEEDS_RESET | `PAIR_INIT` rejected — device still holds enrolled fingerprints; factory reset required |
+| `0xFD` | BUSY | Device busy (OTA in progress) or invalid state (e.g. pairing state machine) |
 | `0xFE` | INVALID_PARAM | Invalid parameter |
 | `0xFF` | ERROR | Unrecognized command or internal operation failure |
+
+The status code in the second byte of a `PAIR_INIT` response is the pairing-specific value (`0xF0`/`0xF1`) rather than a generic response code.
 
 ---
 
@@ -69,28 +73,44 @@ Maximum packet size: 64 bytes.
 
 | Command | Code | Direction | Payload | Response |
 |---------|------|-----------|---------|----------|
-| GET_STATUS | `0x01` | App -> Device | — | `[0x00][fp_bitmap:1B][paired:1B]` |
-| FP_LIST | `0x13` | App -> Device | — | `[0x00][bitmap:1B]` |
-| FP_MATCH_ACK | `0x22` | App -> Device | — | `[0x00]` |
+| GET_STATUS | `0x01` | App -> Device | — | `[0x00][fp_bitmap:1B][paired:1B]` (+ optional pending-match tail) |
+| GET_BATT_RAW | `0x02` | App -> Device | — | `[0x00][mv_lo:1B][mv_hi:1B][pct:1B][adc_lo:1B][adc_hi:1B]` |
 | AUTH_REQUEST | `0x33` | App -> Device | — | `[0x11]` (wait for fingerprint) |
 | FACTORY_RESET | `0x36` | App -> Device | — | `[0x00]` or `[0x11]` (FP-gated) |
+| GATE_CANCEL | `0x37` | App -> Device | — | `[0x00]` (cancels a pending FP-gated command) |
+| CHALLENGE | `0x38` | App -> Device | `[nonce:8B]` | `[0x38][hmac:8B]` — `HMAC-SHA256(shared_key, nonce)[0:8]` |
 
-### Fingerprint Enrollment
+`CHALLENGE` is used after reconnection to verify the device identity without re-pairing (see [security.md](security.md)).
+
+### Fingerprint
 
 | Command | Code | Direction | Payload | Response |
 |---------|------|-----------|---------|----------|
 | ENROLL_START | `0x10` | App -> Device | `[slot_id:1B]` | `[0x00]` or `[0x11]` (FP-gated) |
+| ENROLL_CANCEL | `0x11` | App -> Device | — | `[0x00]` |
 | DELETE_FP | `0x12` | App -> Device | `[slot_id:1B]` | `[0x00]` or `[0x11]` (FP-gated) |
+| FP_LIST | `0x13` | App -> Device | — | `[0x00][bitmap:1B]` |
+| FP_MATCH_ACK | `0x22` | App -> Device | — | `[0x00]` |
+
+The fingerprint slot bitmap covers slots `0–28` (29 templates max).
 
 ### ECDH Pairing
 
 | Command | Code | Direction | Payload | Response |
 |---------|------|-----------|---------|----------|
-| PAIR_INIT | `0x30` | App -> Device | — | Async: `[0x30][compressed_pubkey:33B]` |
+| PAIR_INIT | `0x30` | App -> Device | — | `[0x30][0xF0]` (WAIT_BUTTON) or `[0x30][0xF1]` (NEEDS_RESET) |
 | PAIR_CONFIRM | `0x31` | App -> Device | `[app_pubkey:33B]` | Async: `[0x31][status:1B]` |
 | PAIR_STATUS | `0x32` | App -> Device | — | `[0x32][paired:1B]` |
 
-ECDH computation (~2 s on CH592F) is deferred via TMOS events to avoid blocking the BLE stack. See [security.md](security.md) for the full pairing flow.
+**Pairing is button-gated.** `PAIR_INIT` does not start ECDH immediately:
+
+1. App sends `PAIR_INIT`. If the device already holds fingerprints it replies `[0x30][0xF1]` (a factory reset is required first).
+2. Otherwise the device replies `[0x30][0xF0]` (WAIT_BUTTON), blinks its LED, and opens a 30-second window.
+3. The user **short-presses the physical button** on the device to confirm. The device emits a `PAIR_BUTTON` notification (`0x34`, status `0x01`) and starts ECDH key generation (~2 s, deferred via TMOS events).
+4. The device sends its compressed public key asynchronously as `[0x30][compressed_pubkey:33B]`.
+5. App sends `PAIR_CONFIRM` with its own compressed public key; the device computes the shared secret (~2 s, deferred) and replies `[0x31][status]`.
+
+A 30-second timeout or a long press aborts the wait (see `PAIR_BUTTON` below). See [security.md](security.md) for the full key-derivation flow.
 
 ### Key Storage (SSH / OTP / API)
 
@@ -145,13 +165,41 @@ Sent during fingerprint enrollment to report status.
 | COMPLETE | `0x04` | Enrollment complete |
 | FAILED | `0xFF` | Enrollment failed |
 
-Six captures are required per enrollment.
+**Twelve captures** are required per enrollment, prompted at guided angles (4 centered, 3 left, 3 right, 1 up, 1 down).
+
+### Lock Request (`0x23`)
+
+```
+[0x23]    (1 byte, no payload)
+```
+
+Sent when the user long-presses the device button to request a screen lock. The app decides based on the current screen state: if already locked it is ignored (it may follow a `0x21` unlock notification); if unlocked it triggers a system lock.
+
+### Pair Button (`0x34`)
+
+```
+[0x34][status:1B]    (2 bytes)
+```
+
+| Status | Meaning |
+|--------|---------|
+| `0x00` | 30-second wait timed out — pairing aborted |
+| `0x01` | Button pressed — ECDH key exchange starting |
+| `0x02` | Long press — user cancelled pairing |
+
+### Connection Parameter Update (`0xF0`)
+
+```
+[0xF0][interval_hi:1B][interval_lo:1B][latency:1B][timeout_hi:1B][timeout_lo:1B]    (6 bytes)
+```
+
+Informational notification reporting the negotiated BLE connection parameters (interval in units of 1.25 ms, timeout in units of 10 ms). The multi-byte fields in this notification are **big-endian**.
 
 ---
 
 ## Fingerprint Gate (FP Gate)
 
-Sensitive operations (delete fingerprint, factory reset, key signing, pairing) require biometric verification before execution:
+Sensitive operations (delete fingerprint, factory reset, key signing/generation/deletion/commit, OTP generation) require biometric verification before execution:
 
 1. App sends a command (e.g. `DELETE_FP`).
 2. Device returns `0x11` (WAIT_FP).
@@ -160,7 +208,7 @@ Sensitive operations (delete fingerprint, factory reset, key signing, pairing) r
 5. App verifies HMAC, replies with `0x22` (FP_MATCH_ACK).
 6. Device executes the buffered command.
 
-A 10-second cooldown allows consecutive operations without re-verification.
+A 10-second cooldown allows consecutive operations without re-verification. `GATE_CANCEL` (`0x37`) cancels a pending gated command before the touch.
 
 ---
 

@@ -1,102 +1,105 @@
-# immurok macOS App 技术规格
+# immurok macOS App — Technical Specification
 
-## 概述
+## Overview
 
-immurok macOS App 是一个常驻后台的 Menu Bar 应用（LSUIElement），通过 BLE 与 CH592F 指纹设备通信，提供屏幕解锁、系统认证、SSH 密钥管理等功能。
+The immurok macOS app is a background-resident menu bar application (`LSUIElement`) that communicates with the CH592F fingerprint device over BLE. It provides screen unlock, system authentication, SSH key management, and related features.
 
-## 架构
+## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    immurokApp (SwiftUI)               │
-│  MenuBarExtra (状态栏) + Settings Window (500x420)     │
+│  MenuBarExtra (status bar) + Settings Window (500x420)│
 ├────────────┬──────────────┬───────────┬───────────────┤
 │ AppDelegate│ AppViewModel │ContentView│ QuickFillPanel│
-│  生命周期   │  UI 状态     │ 设置 Tab  │  全局快捷键    │
+│  lifecycle │  UI state    │ settings  │ global hotkey │
 ├────────────┴──────────────┴───────────┴───────────────┤
 │                     BLEManager                        │
-│            GATT 通信 / 命令队列 / 重连 / 保活           │
+│       GATT comms / command queue / reconnect / keepalive
 ├──────────┬──────────┬──────────┬──────────────────────┤
 │ PAMSocket│SSHAgent  │CLISocket │  ImmurokSecurity     │
 │ Server   │Server    │Server    │  ECDH/HMAC/Keychain  │
 └──────────┴──────────┴──────────┴──────────────────────┘
 ```
 
-## 源文件结构
+## Source File Layout
 
-| 文件 | 行数 | 功能 |
-|------|------|------|
-| `immurokApp.swift` | ~190 | 应用入口，MenuBarExtra + Settings Window |
-| `AppDelegate.swift` | ~600 | 初始化服务，指纹匹配处理，屏幕解锁 |
-| `AppViewModel.swift` | ~420 | UI 状态管理，设备操作封装 |
-| `BLEManager.swift` | ~1960 | BLE GATT 核心，命令协议，重连保活 |
-| `ImmurokSecurity.swift` | ~230 | ECDH 配对，HMAC 验签，Keychain 存储 |
-| `PAMSocketServer.swift` | ~940 | Unix socket PAM 认证服务 |
-| `SSHAgentServer.swift` | ~370 | OpenSSH Agent 协议实现 |
-| `CLISocketServer.swift` | ~380 | CLI 工具通信接口 |
-| `FingerprintView.swift` | ~630 | 指纹管理界面与录入流程 |
-| `SettingsTabViews.swift` | ~2190 | 设置窗口各 Tab |
-| `QuickFillPanel.swift` | ~820 | 快速填充浮动面板 |
-| `KeystoreViewModel.swift` | ~400 | 密钥浏览/导入导出 |
-| `SSHKeyCache.swift` | ~270 | SSH 公钥本地缓存 |
-| `KeyNameCache.swift` | ~105 | 密钥名称统一缓存 |
-| `LocalizationManager.swift` | ~1110 | 8 语言本地化 |
-| `SetupManager.swift` | ~110 | 初始状态检查 |
-| `SetupWizardView.swift` | ~360 | 首次启动向导 |
-| `GlobalHotKey.swift` | — | 全局快捷键注册 |
-| `LogManager.swift` | ~25 | 运行日志 |
+| File | Lines | Purpose |
+|------|-------|---------|
+| `immurokApp.swift` | ~190 | App entry point, MenuBarExtra + Settings Window |
+| `AppDelegate.swift` | ~600 | Service initialization, fingerprint-match handling, screen unlock |
+| `AppViewModel.swift` | ~420 | UI state management, device-operation wrappers |
+| `BLEManager.swift` | ~1960 | BLE GATT core, command protocol, reconnect/keepalive |
+| `ImmurokSecurity.swift` | ~230 | ECDH pairing, HMAC verification, Keychain storage |
+| `PAMSocketServer.swift` | ~940 | Unix socket PAM authentication service |
+| `SSHAgentServer.swift` | ~370 | OpenSSH Agent protocol implementation |
+| `CLISocketServer.swift` | ~380 | CLI tool communication interface |
+| `FingerprintView.swift` | ~630 | Fingerprint management UI and enrollment flow |
+| `SettingsTabViews.swift` | ~2190 | Settings window tabs |
+| `QuickFillPanel.swift` | ~820 | Quick Fill floating panel |
+| `KeystoreViewModel.swift` | ~400 | Key browsing / import / export |
+| `SSHKeyCache.swift` | ~270 | Local SSH public key cache |
+| `KeyNameCache.swift` | ~105 | Unified key-name cache |
+| `LocalizationManager.swift` | ~1110 | 8-language localization |
+| `SetupManager.swift` | ~110 | Initial-state checks |
+| `SetupWizardView.swift` | ~360 | First-launch wizard |
+| `GlobalHotKey.swift` | — | Global hotkey registration |
+| `LogManager.swift` | ~25 | Runtime log |
 
-## BLE 通信
+## BLE Communication
 
-### GATT 服务
+### GATT Services
 
-| 服务 | UUID | 用途 |
-|------|------|------|
-| immurok 自定义 | `12340010-...` | 命令/响应通道 |
-| CMD 特征 | `12340011-...` | App → 设备（Write with Response） |
-| RSP 特征 | `12340012-...` | 设备 → App（Notify） |
-| OTA 服务 | `FEE0` / `FEE1` | 固件升级 |
-| Device Info | `180A` / `2A26` | 固件版本读取 |
+| Service | UUID | Purpose |
+|---------|------|---------|
+| immurok custom | `12340010-...` | Command / response channel |
+| CMD characteristic | `12340011-...` | App → Device (Write with Response) |
+| RSP characteristic | `12340012-...` | Device → App (Notify) |
+| OTA service | `FEE0` / `FEE1` | Firmware update |
+| Device Info | `180A` / `2A26` | Firmware version read |
 
-### 命令协议
+### Command Protocol
 
-包格式：`[cmd:1B][payloadLen:1B][payload...]`
+Packet format: `[cmd:1B][payloadLen:1B][payload...]`
 
-| 命令 | ID | 说明 | 需要验证 |
-|------|----|------|---------|
-| GET_STATUS | 0x01 | 状态/电量/版本/pending match | 否 |
-| ENROLL_START | 0x10 | 录入指纹 | 是 |
-| ENROLL_CANCEL | 0x11 | 取消录入 | 否 |
-| DELETE_FP | 0x12 | 删除指纹 | 是 |
-| FP_LIST | 0x13 | 指纹位图 | 否 |
-| FP_MATCH_ACK | 0x22 | 匹配确认 | 否 |
-| PAIR_INIT | 0x30 | ECDH 配对初始化 | 否 |
-| PAIR_CONFIRM | 0x31 | ECDH 配对确认 | 否 |
-| PAIR_STATUS | 0x32 | 配对状态查询 | 否 |
-| AUTH_REQUEST | 0x33 | PAM 认证请求 | 是 |
-| FACTORY_RESET | 0x36 | 恢复出厂 | 是 |
-| GATE_CANCEL | 0x37 | 取消指纹门控 | 否 |
-| CHALLENGE | 0x38 | 设备身份验证 | 否 |
-| KEY_COUNT | 0x60 | 密钥数量 | 否 |
-| KEY_READ | 0x61 | 读密钥（公开部分） | 否 |
-| KEY_WRITE | 0x62 | 写密钥 | 是 |
-| KEY_DELETE | 0x63 | 删除密钥 | 是 |
-| KEY_COMMIT | 0x64 | 提交到 Flash | 是 |
-| KEY_SIGN | 0x65 | ECDSA 签名 | 是 |
-| KEY_GETPUB | 0x66 | 获取公钥 | 否 |
-| KEY_GENERATE | 0x67 | 生成密钥对 | 是 |
-| KEY_RESULT | 0x68 | 读结果缓冲 | 否 |
-| KEY_OTP_GET | 0x69 | TOTP 计算 | 是 |
+| Command | ID | Description | FP-gated |
+|---------|----|-------------|----------|
+| GET_STATUS | 0x01 | Status / battery / version / pending match | No |
+| GET_BATT_RAW | 0x02 | Raw battery voltage + percentage + ADC | No |
+| ENROLL_START | 0x10 | Enroll fingerprint | Yes |
+| ENROLL_CANCEL | 0x11 | Cancel enrollment | No |
+| DELETE_FP | 0x12 | Delete fingerprint | Yes |
+| FP_LIST | 0x13 | Fingerprint bitmap | No |
+| FP_MATCH_ACK | 0x22 | Match acknowledgement | No |
+| PAIR_INIT | 0x30 | ECDH pairing init (button-gated) | No |
+| PAIR_CONFIRM | 0x31 | ECDH pairing confirm | No |
+| PAIR_STATUS | 0x32 | Pairing status query | No |
+| AUTH_REQUEST | 0x33 | PAM authentication request | Yes |
+| FACTORY_RESET | 0x36 | Factory reset | Yes |
+| GATE_CANCEL | 0x37 | Cancel pending FP gate | No |
+| CHALLENGE | 0x38 | Device identity verification | No |
+| KEY_COUNT | 0x60 | Key count | No |
+| KEY_READ | 0x61 | Read key (public part) | No |
+| KEY_WRITE | 0x62 | Write key | Yes |
+| KEY_DELETE | 0x63 | Delete key | Yes |
+| KEY_COMMIT | 0x64 | Commit to flash | Yes |
+| KEY_SIGN | 0x65 | ECDSA signature | Yes |
+| KEY_GETPUB | 0x66 | Get public key | No |
+| KEY_GENERATE | 0x67 | Generate keypair | Yes |
+| KEY_RESULT | 0x68 | Read result buffer | No |
+| KEY_OTP_GET | 0x69 | TOTP compute | Yes |
 
-### 连接管理
+Device → App notifications: `0x21` fingerprint match (HMAC-signed), `0x11` enrollment progress, `0x23` lock request, `0x34` pair-button event, `0xF0` connection-parameter update. See [protocol.md](protocol.md) for the wire format.
 
-- **设备发现**：`retrieveConnectedPeripherals` 查找已配对 HID 设备
-- **重连定时器**：断连后每 1 秒 `doConnect()` 重试
-- **连接超时**：`.connecting` 状态超过 10 秒自动重置
-- **睡眠保活**：`beginActivity(.idleSystemSleepDisabled)` 防止系统深度省电断开 BLE
-- **命令队列**：串行发送，`commandInFlight` 互斥，5 秒超时
+### Connection Management
 
-### 设备状态机
+- **Device discovery**: `retrieveConnectedPeripherals` finds the already-paired HID device.
+- **Reconnect timer**: after a disconnect, retries `doConnect()` every 1 s.
+- **Connection timeout**: a `.connecting` state lasting over 10 s auto-resets.
+- **Sleep keepalive**: `beginActivity(.idleSystemSleepDisabled)` prevents deep power saving from dropping BLE.
+- **Command queue**: serial dispatch, `commandInFlight` mutex, 5 s timeout.
+
+### Device State Machine
 
 ```
 disconnected → connecting → connected(name)
@@ -104,224 +107,231 @@ disconnected → connecting → connected(name)
      └───── didDisconnect ───────┘
 ```
 
-## 安全机制
+## Security
 
-### ECDH 配对
+### ECDH Pairing (Button-Gated)
 
 ```
 App                          Device
- │  PAIR_INIT                   │
+ │  PAIR_INIT (0x30)            │
  │──────────────────────────────►│
- │  [0x30][device_pubkey:33B]   │ ← 设备生成 P-256 密钥对
+ │  [0x30][0xF0] WAIT_BUTTON    │ ← device blinks LED, opens 30 s window
+ │◄──────────────────────────────│
+ │   (user short-presses button)│
+ │  [0x34][0x01] confirmed      │
+ │◄──────────────────────────────│ ← device generates P-256 keypair (~2 s)
+ │  [0x30][device_pubkey:33B]   │
  │◄──────────────────────────────│
  │  PAIR_CONFIRM(app_pubkey)    │
- │──────────────────────────────►│ ← App 生成密钥对
- │  [0x31][OK]                  │
+ │──────────────────────────────►│ ← App generates its keypair
+ │  [0x31][OK]                  │ ← device computes shared secret
  │◄──────────────────────────────│
  │                              │
- │  双方: ECDH → HKDF-SHA256   │
+ │  Both: ECDH → HKDF-SHA256   │
  │  salt: "immurok-pairing-salt"│
  │  info: "immurok-shared-key"  │
  │  → shared_key (32 bytes)     │
 ```
 
-### Challenge-Response 验证
+`PAIR_INIT` is rejected with `[0x30][0xF1]` (NEEDS_RESET) if the device still holds fingerprints. A 30 s timeout (`0x34 0x00`) or long press (`0x34 0x02`) aborts.
+
+### Challenge-Response Verification
 
 ```
-连接后:
-  UUID 匹配缓存？→ 是 → isDeviceVerified = true（跳过 challenge）
-                → 否 → App 发 [0x38][nonce:8B]
-                       设备回 [0x38][HMAC-SHA256(key, nonce):8B]
-                       App 验证 → 通过则缓存 UUID
+After connection:
+  UUID in cache? → Yes → isDeviceVerified = true (skip challenge)
+                → No  → App sends [0x38][nonce:8B]
+                        Device replies [0x38][HMAC-SHA256(key, nonce)[0:8]]
+                        App verifies → on success, caches UUID
 ```
 
-### 指纹匹配签名
+### Fingerprint Match Signing
 
 ```
-设备 → App: [0x21][page_id:2B LE][HMAC-SHA256(key, 0x21||page_id):8B]
-App 验证 HMAC 后才触发解锁/认证
+Device → App: [0x21][page_id:2B LE][HMAC-SHA256(key, 0x21||page_id)[0:8]]
+App acts on the notification only after verifying the HMAC.
 ```
 
-### Keychain 存储
+### Keychain Storage
 
-| 服务标识 | 内容 | 访问级别 |
-|---------|------|---------|
-| `com.immurok.shared-key` | ECDH 共享密钥 (32B) | AfterFirstUnlock |
-| `com.immurok.password` | 屏幕解锁密码 | AfterFirstUnlock |
-| `com.immurok.verified-device` | 已验证设备 UUID | AfterFirstUnlock |
+| Service ID | Content | Access Level |
+|------------|---------|--------------|
+| `com.immurok.shared-key` | ECDH shared key (32 B) | AfterFirstUnlock |
+| `com.immurok.password` | Screen-unlock password | AfterFirstUnlock |
+| `com.immurok.verified-device` | Verified device UUID | AfterFirstUnlock |
 
-### 降级模式
+### Degraded Mode
 
-`isDeviceVerified = false` 时禁用：屏幕解锁、PAM 认证、SSH 签名、OTP、指纹录入/删除、密钥写入/删除/生成、恢复出厂。
+When `isDeviceVerified = false`, the following are disabled: screen unlock, PAM authentication, SSH signing, OTP, fingerprint enroll/delete, key write/delete/generate, factory reset.
 
-保留：BLE 连接、只读查询（GET_STATUS/FP_LIST/KEY_READ/KEY_GETPUB）、重新配对。
+Still allowed: BLE connection, read-only queries (GET_STATUS / FP_LIST / KEY_READ / KEY_GETPUB), and re-pairing.
 
-## 屏幕解锁
+## Screen Unlock
 
-### 流程
+### Flow
 
 ```
-1. 用户按指纹传感器
-2. 设备发 HID CTRL 键 → macOS 唤醒屏幕
-3. 设备搜索指纹 → 匹配 → 发 0x21 通知（HMAC 签名）
-4. App 收到 → 验证 HMAC → handleFingerprintMatch()
-5. 检测锁屏窗口（loginwindow/ScreenSaverEngine）
-6. fakeKeyStrokes() 输入密码 + 回车
-7. 2 秒后检查 isScreensaverWindowVisible()，失败重试一次
+1. User touches the fingerprint sensor.
+2. Device sends an HID CTRL key → macOS wakes the screen.
+3. Device searches → matches → sends 0x21 notification (HMAC-signed).
+4. App receives → verifies HMAC → handleFingerprintMatch().
+5. Detect lock window (loginwindow / ScreenSaverEngine).
+6. fakeKeyStrokes() types the password + Enter.
+7. After 2 s, check isScreensaverWindowVisible(); retry once on failure.
 ```
 
-### Pending Match 机制
+### Pending Match
 
-睡眠期间 BLE 断连时指纹匹配的 0x21 通知丢失。设备标记 `pending`，重连后 App 发 GET_STATUS 时固件在响应中追加 pending match 数据（30 秒过期）。
+When BLE disconnects during sleep, the `0x21` fingerprint-match notification is lost. The device marks the match `pending`; after reconnection, when the app sends GET_STATUS, the firmware appends the pending-match data to the response (expires after 30 s).
 
-### 安全保护
+### Safeguards
 
-- 输入密码前发 `CGEvent flagsChanged` 清除所有 modifier（防 CTRL 卡住）
-- HID_KEY_RELEASE_EVT 失败自动 10ms 重试
-- HidDev_Report press 失败不安排 release
+- Before typing the password, a `CGEvent flagsChanged` clears all modifiers (prevents a stuck CTRL).
+- `HID_KEY_RELEASE_EVT` failures auto-retry after 10 ms.
+- A failed `HidDev_Report` press does not schedule a release.
 
-## PAM 认证
+## PAM Authentication
 
-### Unix Socket 协议
+### Unix Socket Protocol
 
 ```
 Socket: ~/.immurok/pam.sock (0o600)
-请求: AUTH:username:service
-响应: OK | DENY | RETRY:remaining
+Request:  AUTH:username:service
+Response: OK | DENY | RETRY:remaining
 ```
 
-### 处理流程
+### Handling Flow
 
 ```
-1. PAM 模块连接 → AUTH:user:service
-2. 验证对端 UID（root 或当前用户）
-3. 检查服务是否启用（sudo/authorization）
-4. 检查预授权（10 秒窗口内自动批准）
-5. 检查 isDeviceVerified
-6. 发 AUTH_REQUEST → 等待指纹 → 30 秒超时
-7. 指纹匹配 → OK | 3 次失败 → DENY
+1. PAM module connects → AUTH:user:service
+2. Verify peer UID (root or current user)
+3. Check whether the service is enabled (sudo / authorization)
+4. Check pre-authorization (auto-approve within a 10 s window)
+5. Check isDeviceVerified
+6. Send AUTH_REQUEST → wait for fingerprint → 30 s timeout
+7. Fingerprint match → OK | 3 failures → DENY
 ```
 
-### 预授权
+### Pre-authorization
 
-指纹匹配后无 PAM 请求时，设置 10 秒预授权窗口。窗口内收到的 PAM 请求自动批准。可按 service 限定范围。
+When a fingerprint match arrives with no pending PAM request, a 10 s pre-authorization window is set. PAM requests received within the window are auto-approved. The window can be scoped per service.
 
-### 支持的 PAM 服务
+### Supported PAM Services
 
-| 服务 | 设置项 | 用途 |
-|------|-------|------|
-| sudo / sudo_local | immurok.sudoAuthEnabled | sudo 命令 |
-| authorization | immurok.authorizationEnabled | 系统权限弹窗 |
+| Service | Setting | Purpose |
+|---------|---------|---------|
+| sudo / sudo_local | immurok.sudoAuthEnabled | sudo commands |
+| authorization | immurok.authorizationEnabled | System permission prompts |
 
 ## SSH Agent
 
-### Socket 协议
+### Socket Protocol
 
 ```
 Socket: ~/.immurok/agent.sock (0o600)
-协议: OpenSSH Agent Protocol
+Protocol: OpenSSH Agent Protocol
 ```
 
-### 支持的消息
+### Supported Messages
 
-| 消息 | ID | 说明 |
-|------|----|------|
-| REQUEST_IDENTITIES | 11 | 返回所有 SSH 公钥 |
-| SIGN_REQUEST | 13 | ECDSA-SHA256-NISTP256 签名（需指纹门控） |
-| 其他 | — | 返回 AGENT_FAILURE |
+| Message | ID | Description |
+|---------|----|-------------|
+| REQUEST_IDENTITIES | 11 | Return all SSH public keys |
+| SIGN_REQUEST | 13 | ECDSA-SHA256-NISTP256 signature (FP-gated) |
+| Others | — | Return AGENT_FAILURE |
 
-### 密钥缓存
+### Key Cache
 
 ```
 ~/.immurok/ssh_keys.json
 [{index, name, publicKeyBlob, fingerprint}, ...]
 ```
 
-设备连接时自动同步：KEY_COUNT → KEY_READ 链 → 计算 SHA256 指纹 → 写入 JSON。
+Synced automatically on device connect: KEY_COUNT → KEY_READ chain → compute SHA256 fingerprint → write JSON.
 
-## 密钥管理
+## Key Management
 
-### 存储类别
+### Storage Categories
 
-| 类别 | ID | 条目大小 | 最大数量 | 内容 |
-|------|----|---------|---------|------|
-| SSH | 0 | 112B | 32 | name(16) + pubkey(64) + privkey(32) |
-| OTP | 1 | 92B | 128 | name(30) + service(30) + secret(32) |
-| API | 2 | 160B | 50 | name(32) + key(128) |
+| Category | ID | Entry Size | Max Count | Content |
+|----------|----|-----------|-----------|---------|
+| SSH | 0 | 112 B | 32 | name(16) + pubkey(64) + privkey(32) |
+| OTP | 1 | 92 B | 128 | name(30) + service(30) + secret(32) |
+| API | 2 | 160 B | 50 | name(32) + key(128) |
 
-### 操作权限
+### Operation Permissions
 
-| 操作 | 需指纹门控 | 说明 |
-|------|-----------|------|
-| KEY_READ | 否（API secret 除外） | 公钥/名称可直接读 |
-| KEY_WRITE + KEY_COMMIT | 是 | 写入需指纹确认 |
-| KEY_DELETE | 是 | 删除需指纹确认 |
-| KEY_SIGN | 是 | ECDSA 签名需指纹 |
-| KEY_GENERATE | 是 | 生成密钥对需指纹 |
-| KEY_OTP_GET | 是 | TOTP 计算需指纹 |
+| Operation | FP-gated | Notes |
+|-----------|----------|-------|
+| KEY_READ | No (except API secret) | Public key / name readable directly |
+| KEY_WRITE + KEY_COMMIT | Yes | Writing requires fingerprint confirmation |
+| KEY_DELETE | Yes | Deletion requires fingerprint confirmation |
+| KEY_SIGN | Yes | ECDSA signing requires fingerprint |
+| KEY_GENERATE | Yes | Keypair generation requires fingerprint |
+| KEY_OTP_GET | Yes | TOTP compute requires fingerprint |
 
 ## Quick Fill
 
-### 激活
+### Activation
 
-- 全局快捷键：`Ctrl+\`（可自定义）
-- 通过 `GlobalHotKey` 注册 Carbon Event / NSEvent 监听
+- Global hotkey: `Ctrl+\` (customizable)
+- Registered via `GlobalHotKey` using a Carbon Event / NSEvent monitor
 
-### 面板功能
+### Panel Features
 
-- 搜索框 + 条目列表（最多 6 行）
-- 搜索前缀过滤：`o ` OTP、`a ` API、`s ` SSH
-- 选中条目 → 需指纹门控（OTP/API）→ 自动粘贴到焦点窗口
-- 30 秒指纹验证超时
+- Search box + entry list (up to 6 rows)
+- Search prefix filters: `o ` OTP, `a ` API, `s ` SSH
+- Selecting an entry → FP gate (OTP / API) → auto-paste into the focused window
+- 30 s fingerprint verification timeout
 
-## CLI 接口
+## CLI Interface
 
 ```
 Socket: ~/.immurok/cli.sock (0o600)
-协议: 行文本，冒号分隔
+Protocol: line text, colon-separated
 
-命令:
+Commands:
   PING              → OK:immurok
   LIST:category     → OK:count\nname1\nname2\n\n
   GET:category:name → OK:value
   ERROR:reason
 ```
 
-## 设置界面
+## Settings UI
 
-### Tab 结构
+### Tab Structure
 
-| Tab | 内容 |
-|-----|------|
-| Device | 连接状态、电量、版本、指纹管理、配对、密码配置 |
-| Keys | SSH/OTP/API 密钥浏览、添加、删除、导入导出 |
-| Permissions | PAM 功能开关、辅助功能权限、自启动 |
-| Status | 系统状态检查清单（连接/指纹/密码/权限/PAM） |
-| About | 版本信息、运行日志窗口 |
+| Tab | Content |
+|-----|---------|
+| Device | Connection status, battery, version, fingerprint management, pairing, password setup |
+| Keys | SSH/OTP/API key browse, add, delete, import/export |
+| Permissions | PAM feature toggles, Accessibility permission, login item |
+| Status | System status checklist (connection / fingerprint / password / permission / PAM) |
+| About | Version info, runtime log window |
 
-## 本地化
+## Localization
 
-支持 8 种语言，自动检测系统语言：
+Supports 8 languages with automatic system-language detection:
 
-zh-Hans（简体中文）、zh-Hant（繁体中文）、en、ja、fr、es、pt、ru
+zh-Hans (Simplified Chinese), zh-Hant (Traditional Chinese), en, ja, fr, es, pt, ru
 
-支持外部自定义翻译：`~/.immurok/strings.json`
+External custom translations are supported via `~/.immurok/strings.json`.
 
-## 文件系统布局
+## Filesystem Layout
 
 ```
 ~/.immurok/
   ├── pam.sock          Unix socket (PAM)
   ├── agent.sock        Unix socket (SSH Agent)
   ├── cli.sock          Unix socket (CLI)
-  ├── ssh_keys.json     SSH 公钥缓存
-  └── strings.json      自定义翻译（可选）
+  ├── ssh_keys.json     SSH public key cache
+  └── strings.json      Custom translations (optional)
 
 /usr/local/lib/pam/
-  └── pam_immurok.so    PAM 模块
+  └── pam_immurok.so    PAM module
 ```
 
-## 启动序列
+## Launch Sequence
 
 ```
 applicationDidFinishLaunching
@@ -331,12 +341,12 @@ applicationDidFinishLaunching
   → SSHAgentServer()    (if enabled)
   → CLISocketServer()   (if enabled)
   → GlobalHotKey()      (Quick Fill)
-  → SMAppService.mainApp.register()  (登录项)
+  → SMAppService.mainApp.register()  (login item)
 
-BLE 连接成功后:
-  → performChallengeVerification()  (UUID 缓存 / challenge)
+After a successful BLE connection:
+  → performChallengeVerification()  (UUID cache / challenge)
   → onDeviceConnected
     → refreshDeviceStatus()         (GET_STATUS + pending match)
-    → SSHKeyCache.sync()            (SSH 密钥同步)
-    → KeyNameCache.syncNonSSH()     (OTP/API 名称同步)
+    → SSHKeyCache.sync()            (SSH key sync)
+    → KeyNameCache.syncNonSSH()     (OTP / API name sync)
 ```
