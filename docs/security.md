@@ -214,8 +214,8 @@ If the app receives a fingerprint match while no PAM request is pending, it stor
 
 | Property | Value |
 |----------|-------|
-| Sensor | ZW3021 (capacitive) |
-| Storage | ZW3021 internal flash (not on host MCU) |
+| Sensor | R559S (capacitive) |
+| Storage | R559S internal flash (not on host MCU) |
 | Capacity | 29 templates |
 | Enrollment | 6 captures merged into one template |
 | Module password | Derived from device MAC address |
@@ -259,6 +259,6 @@ The OTA image is encrypted and signed before transmission. The IAP bootloader ve
 | Key derivation | HKDF-SHA256 | 256-bit output |
 | Notification auth | HMAC-SHA256 (truncated) | 64-bit tag |
 | Password storage | macOS Keychain | OS-managed |
-| Template storage | ZW3021 on-chip | Hardware-isolated |
+| Template storage | R559S on-chip | Hardware-isolated |
 | SSH key signing | On-device ECDSA P-256 | 256-bit curve |
 | OTA integrity | AES-128-CTR + HMAC-SHA256 | 128-bit / 256-bit |

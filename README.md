@@ -23,7 +23,7 @@ immurok is an open-source hardware security key with a built-in fingerprint sens
 ```
                  ┌──────────────────────┐     BLE      ┌──────────────────┐
                  │  Companion App       │◄────────────►│  immurok Device  │
-                 │  (macOS / Linux)     │   Custom     │  CH592F + ZW3021 │
+                 │  (macOS / Linux)     │   Custom     │  CH592F + R559S  │
   ┌───────────┐  │                      │   GATT       │                  │
   │ AI agent  │─►│  - BLE manager       │              │  - BLE HID       │
   │ (Claude   │  │  - PAM socket server │              │  - Fingerprint   │
@@ -82,7 +82,7 @@ docs/
 | Component | Part | Notes |
 |-----------|------|-------|
 | MCU | WCH CH592F | RISC-V, BLE 5.4, 448 KB flash |
-| Fingerprint sensor | ZW3021 | Capacitive, 508 DPI, < 500 ms match, 29 templates |
+| Fingerprint sensor | R559S | Capacitive, 508 DPI, < 500 ms match, 29 templates |
 | Connection | Bluetooth LE | HID keyboard + custom GATT |
 | Power | USB-C | Bus-powered |
 
