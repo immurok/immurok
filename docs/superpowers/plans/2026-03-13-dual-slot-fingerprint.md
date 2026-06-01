@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Each user fingerprint occupies two ZW3021 physical slots for improved recognition accuracy, with 12-capture enrollment (two phases of 6), transparent to the App.
+**Goal:** Each user fingerprint occupies two R559S physical slots for improved recognition accuracy, with 12-capture enrollment (two phases of 6), transparent to the App.
 
 **Architecture:** Firmware state machine expanded from 8 to ~16 steps with two capture-merge-store rounds. Mapping: `finger_id N → slot N*2, N*2+1`. Firmware translates all physical slot references before sending to App (bitmap, page_id, enroll response). App changes minimal: total=12, new adjust event.
 
@@ -269,7 +269,7 @@ if(enroll_step == 0) {
 At `hidkbd.c:1518-1580`, the capture loop logic. Key changes:
 - `capture_num` now considers the round: `round * 6 + local_step` for progress reporting
 - After 6th capture, go to merge (step 7) instead of directly
-- Use buffer IDs 1-6 in both rounds (ZW3021 reuses buffers per merge)
+- Use buffer IDs 1-6 in both rounds (R559S reuses buffers per merge)
 
 ```c
 else if(enroll_step >= 1 && enroll_step <= 6) {

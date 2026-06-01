@@ -4,7 +4,7 @@
 
 **Goal:** 所有需要指纹验证的固件命令统一预热传感器 + LED 反馈，替换 AUTH_REQUEST 的特殊预热路径。
 
-**Architecture:** 新增 `fp_gate_enter()` 函数统一预热逻辑。在 `fp_gate_needed()` 返回 true 后调用：上电 + 绿灯闪烁 + 等待触摸。匹配成功蓝灯，失败红灯，3 次失败或超时终止。VER0 用 ZW3021 LED，VER2 用板载 RGB LED。
+**Architecture:** 新增 `fp_gate_enter()` 函数统一预热逻辑。在 `fp_gate_needed()` 返回 true 后调用：上电 + 绿灯闪烁 + 等待触摸。匹配成功蓝灯，失败红灯，3 次失败或超时终止。VER0 用 R559S LED，VER2 用板载 RGB LED。
 
 **Tech Stack:** C (CH592F WCH SDK), TMOS cooperative scheduler
 

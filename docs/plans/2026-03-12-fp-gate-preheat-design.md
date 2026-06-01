@@ -12,7 +12,7 @@
 
 1. **统一预热**：所有 gated 命令（含 AUTH_REQUEST）走同一套 `fp_gate_enter()` 逻辑，删除 `s_auth_preheat` 特殊路径。
 2. **预热时机**：在 `fp_gate_needed()` 返回 true 后才预热，尊重 10s cooldown，避免浪费电。
-3. **LED 分版本**：VER0 用 ZW3021 内部 LED（UART 命令），VER1/VER2 用板载 RGB LED（TMOS 非阻塞）。
+3. **LED 分版本**：VER0 用 R559S 内部 LED（UART 命令），VER1/VER2 用板载 RGB LED（TMOS 非阻塞）。
 
 ## 架构
 
@@ -37,7 +37,7 @@ FP_WAKE_DONE_EVT 中：当 `s_gate_preheat` 时发送绿灯闪烁命令，清除
 
 ### LED 反馈矩阵
 
-| 阶段 | VER2 板载 RGB | VER0 ZW3021 |
+| 阶段 | VER2 板载 RGB | VER0 R559S |
 |------|-------------|-------------|
 | 等待触摸 | `led_blink_start('G')` ~1Hz | `fp_led_flash(GREEN, 20, 0)` |
 | 匹配成功 | `led_solid('B', 1s)` | `fp_led_flash(BLUE, 25, 1)` |
