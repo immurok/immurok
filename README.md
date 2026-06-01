@@ -152,6 +152,7 @@ OTA images are encrypted (AES-128-CTR) and signed (HMAC-SHA256). Keys are genera
 | [hardware/README.md](hardware/README.md) | Hardware design — component selection, GPIO pinout, wiring diagram |
 | [ota/README.md](ota/README.md) | OTA update — flash layout, boot sequence, .imfw package format |
 | [app-macos/README.md](app-macos/README.md) | macOS app — build instructions, architecture, source file guide |
+| [app-linux-rs/README.md](app-linux-rs/README.md) | Linux app — per-distro dependencies, install steps, desktop-environment notes, troubleshooting |
 | [imk-skill](https://github.com/immurok/imk-skill) | The AI-agent skill — how Claude Code / Cursor / Codex / Aider / Cline / Gemini CLI use `imk run --agent` to gate privileged commands |
 
 ## Security
