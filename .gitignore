@@ -27,9 +27,11 @@ ota/iap/build/
 ota/jumpapp/build/
 
 
-# === OTA keys (per-machine, never commit) ===
-firmware/APP/include/ota_keys.h
-ota/ota_keys.py
+# === OTA keys ===
+# Intentionally NOT ignored: ota_keys.h, ota_keys.py, ota/ota_ec_private.pem are
+# versioned in the PRIVATE monorepo (origin = 192.168.1.98). scripts/sync-github.sh
+# excludes all three from the public GitHub repos. The EC private key can forge
+# firmware for the whole fleet — never push the tree to a github remote directly.
 
 # === Python ===
 __pycache__/
@@ -39,6 +41,7 @@ venv/
 .venv/
 
 # === Website ===
+.wrangler/
 website/.wrangler/
 website-v2/.wrangler/
 node_modules/
@@ -54,3 +57,6 @@ xcuserdata/
 *.tmp
 *.swp
 *~
+
+# Superpowers brainstorming mockups
+.superpowers/

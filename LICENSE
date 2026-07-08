@@ -5,6 +5,11 @@ Parameters
 Licensor:             immurok
 Licensed Work:        immurok
                       The Licensed Work is (c) 2026 immurok.
+                      Excluded from the Licensed Work: the companion
+                      applications in app-macos/ (incl. its PAM module)
+                      and app-linux-rs/, which are licensed under the
+                      Apache License 2.0 (see the LICENSE file in each
+                      directory).
 Additional Use Grant: You may make use of the Licensed Work, provided that
                       you may not use the Licensed Work for a Commercial
                       Purpose. A "Commercial Purpose" is any use that is

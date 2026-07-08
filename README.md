@@ -173,8 +173,10 @@ See [docs/security.md](docs/security.md) for the full security whitepaper.
 
 ## License
 
-This project is licensed under the [Business Source License 1.1](LICENSE).
+Licensing is split by component:
 
-- **Permitted**: personal use, education, non-commercial research
-- **Not permitted**: commercial use (until the Change Date)
-- **Change Date**: 2030-03-05 — automatically converts to **Apache License 2.0**
+- **Companion apps — open source**: [app-macos](https://github.com/immurok/app-macos) (incl. the PAM module) and [app-linux-rs](https://github.com/immurok/app-linux-rs) are licensed under the **Apache License 2.0** (see the `LICENSE` file in each repository).
+- **Everything else** (firmware, OTA tooling, hardware, docs) is licensed under the [Business Source License 1.1](LICENSE):
+  - **Permitted**: personal use, education, non-commercial research
+  - **Not permitted**: commercial use (until the Change Date)
+  - **Change Date**: 2030-03-05 — automatically converts to **Apache License 2.0**
