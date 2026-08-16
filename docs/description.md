@@ -2,7 +2,7 @@
 
 **One touch. No more passwords.**
 
-immurok is a compact wireless Bluetooth fingerprint authenticator built for Mac and Linux desktop users. It lets you replace passwords with your fingerprint for everyday actions — screen unlock, sudo authorization, SSH signing, and more — with a single touch.
+immurok is a compact wireless Bluetooth fingerprint authenticator for Mac, Windows, and Linux. It lets you replace passwords with your fingerprint for everyday actions: screen unlock, sudo authorization, SSH signing, and more, with a single touch.
 
 ---
 
@@ -12,7 +12,7 @@ immurok is a compact wireless Bluetooth fingerprint authenticator built for Mac 
 
 If you use a Mac mini, Mac Studio, Mac Pro, or a MacBook closed-lid with an external display, you don't have Touch ID. Apple's only answer is to spend ~$200 on a Magic Keyboard with Touch ID — and you have to use it as your main keyboard. If you're attached to your mechanical keyboard, that's not an option.
 
-Linux users have it worse: there's almost no usable desktop fingerprint solution at all.
+On Windows desktops without Hello hardware, fingerprint sign-in means buying a wired USB dongle that only does login. Linux users have it worse: there's almost no usable desktop fingerprint solution at all.
 
 That's the problem immurok solves.
 
@@ -21,7 +21,7 @@ That's the problem immurok solves.
 ## Core Features
 
 ### Screen Unlock
-While locked, just touch the sensor to unlock automatically. No opening the lid, no typing. Supported on both macOS and Linux.
+While locked, just touch the sensor to unlock automatically. No opening the lid, no typing. Supported on macOS, Windows, and Linux. On Windows the unlock goes through a native Credential Provider that plugs into the login screen itself.
 
 ### sudo and System Authorization
 `sudo` prompting for a password in the terminal? System Settings asking you to authenticate? Touch your fingerprint to approve. Deep integration with the system authentication stack via a custom PAM module — not a simple password autofill.
@@ -29,8 +29,14 @@ While locked, just touch the sensor to unlock automatically. No opening the lid,
 ### SSH Signing and Git Commit Signing
 The device holds a built-in ECDSA P-256 keypair; the private key never leaves the hardware. You can sign Git commits and SSH login requests with your fingerprint — more convenient than a GPG key, more secure than a password.
 
+### Two Computers, One Device
+Bind the device to two computers at once, each with its own pairing. Enroll a dedicated switch fingerprint and one touch moves the device to the other machine, which reconnects automatically. A desk Mac and a work laptop can share the same authenticator.
+
+### Password Manager Unlock (macOS)
+Unlock 1Password or Bitwarden with a touch. The app detects the unlock prompt, and your fingerprint injects a separately stored vault password. You can also add your own injection targets with a crosshair picker.
+
 ### Long Battery Life
-Idle current under 30 µA, USB-C charging, up to ~3 months of standby. The device sleeps automatically when idle and wakes the instant you touch it.
+Idle current around 40 µA, USB-C charging, a month or more of standby. The device sleeps automatically when idle and wakes the instant you touch it.
 
 ---
 
@@ -74,11 +80,11 @@ Once installed, the first time the agent wants to run a privileged command in yo
 
 ### The First True Wireless Bluetooth Fingerprint Authenticator
 
-Fingerprint solutions on the market are either built into laptops or wired over USB. immurok is the first fingerprint authenticator that connects wirelessly over Bluetooth and supports both macOS and Linux. Put it anywhere on your desk — no cables.
+Fingerprint solutions on the market are either built into laptops or wired over USB. immurok is the first fingerprint authenticator that connects wirelessly over Bluetooth and supports macOS, Windows, and Linux. Put it anywhere on your desk, no cables.
 
-### Mac and Linux at the Same Time
+### Mac, Windows, and Linux at the Same Time
 
-Not "supports Mac, Linux planned" — Linux is supported now. macOS has a native Swift menu bar app; Linux has a Rust daemon with a TUI management interface. Both platforms have full PAM integration.
+All three platforms are supported today, not "planned". macOS has a native Swift menu bar app. Windows has a .NET service plus a native Credential Provider for the login screen. Linux has a Rust daemon with a TUI management interface. macOS and Linux get full PAM integration.
 
 ### A Standalone Device, Not Tied to a Keyboard
 
@@ -108,13 +114,15 @@ Most biometric devices only do screen unlock. immurok achieves system-level inte
 |---------|---------|---------------------------|------------------------|
 | Wireless | ✅ Bluetooth LE | ✅ Bluetooth | ❌ USB wired |
 | Mac desktop support | ✅ | ✅ | ⚠️ Partial |
+| Windows support | ✅ | ❌ | ✅ Windows Hello |
 | Linux support | ✅ | ❌ | ⚠️ Limited |
 | sudo / PAM integration | ✅ | ❌ | ❌ |
 | SSH signing | ✅ | ❌ | ❌ |
 | **AI agent command authorization** | ✅ `imk run --agent` | ❌ | ❌ |
 | **FP-gated secret vault (API key / OTP)** | ✅ `imk://...` URI | ❌ | ❌ |
+| Works with two computers | ✅ dual-host switching | ❌ | ❌ |
 | Standalone (not tied to a keyboard) | ✅ | ❌ must be main keyboard | ✅ |
-| Open source | ✅ | ❌ | ❌ |
+| Source code public | ✅ apps are Apache 2.0 | ❌ | ❌ |
 | Price | Far below a Magic Keyboard | ~$200 | $15–45 |
 
 ---
@@ -124,9 +132,10 @@ Most biometric devices only do screen unlock. immurok achieves system-level inte
 - **Connectivity**: Bluetooth LE 5.4
 - **Fingerprint sensor**: Capacitive, 508 DPI, recognition time < 0.5 s
 - **FAR / FRR**: < 0.001% / < 1%
-- **Stored fingerprints**: up to 10
+- **Stored fingerprints**: 5 authentication fingerprints plus a dedicated host-switch fingerprint
+- **Paired computers**: 2 (dual-host, one-touch switching)
 - **Charging**: USB-C
-- **Standby life**: ~3 months
+- **Standby life**: a month or more
 - **Dimensions**: 52 × 32 × 12 mm
 
 ---
@@ -136,7 +145,9 @@ Most biometric devices only do screen unlock. immurok achieves system-level inte
 - **Developers who lean heavily on AI coding agents** — those who want the agent to run commands autonomously without handing over sudo / SSH / API keys
 - Developers and pros on Mac mini / Mac Studio / Mac Pro
 - MacBook users running closed-lid with an external display
+- Windows desktop users without Hello hardware
 - Linux users who need desktop fingerprint authentication
+- Anyone working across two machines who wants one authenticator for both
 - Privacy-conscious, security-minded users who don't want to depend on cloud services
 - Anyone who uses a mechanical keyboard but still wants fingerprint unlock
 

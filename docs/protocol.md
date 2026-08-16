@@ -90,14 +90,30 @@ The status code in the second byte of a `PAIR_INIT` response is the pairing-spec
 
 | Command | Code | Direction | Payload | Response |
 |---------|------|-----------|---------|----------|
-| GET_STATUS | `0x01` | App -> Device | — | `[0x00][fp_bitmap:1B][paired:1B]` (+ optional pending-match tail) |
+| GET_STATUS | `0x01` | App -> Device | — | see below |
 | GET_BATT_RAW | `0x02` | App -> Device | — | `[0x00][mv_lo:1B][mv_hi:1B][pct:1B][adc_lo:1B][adc_hi:1B]` |
 | AUTH_REQUEST | `0x33` | App -> Device | — | `[0x11]` (wait for fingerprint) |
 | FACTORY_RESET | `0x36` | App -> Device | — | `[0x00]` or `[0x11]` (FP-gated) |
 | GATE_CANCEL | `0x37` | App -> Device | — | `[0x00]` (cancels a pending FP-gated command) |
 | CHALLENGE | `0x38` | App -> Device | `[nonce:8B]` | `[0x38][hmac:8B]` — `HMAC-SHA256(shared_key, nonce)[0:8]` |
 
+`GET_STATUS` response (9 bytes + optional tail):
+
+```
+[0x00][fp_bitmap:1B][paired:1B][batt_pct:1B]
+[fw_major:1B][fw_minor:1B][fw_patch:1B][build_hi:1B][build_lo:1B]
+```
+
+- `paired` reflects the **active host slot**, not "any slot" — a connecting host is asking about itself.
+- `batt_pct` comes from a 5-minute periodic measurement cache (no blocking ADC read in the GATT callback).
+- Firmware version is carried here because macOS blocks the standard Device Information Service for HID devices.
+- If a fingerprint-match notification was lost during a disconnect, byte 9 is `0x21` followed by the 10-byte signed match payload (pending-match tail); otherwise byte 9 is `0`.
+
 `CHALLENGE` is used after reconnection to verify the device identity without re-pairing (see [security.md](security.md)).
+
+A physical factory reset is also available without the app: hold the device
+button for ~3 seconds (LED turns yellow after 1 s as a warning, red when the
+wipe starts). It clears all keys, BLE bonds, and fingerprint templates.
 
 ### Fingerprint
 
@@ -109,7 +125,10 @@ The status code in the second byte of a `PAIR_INIT` response is the pairing-spec
 | FP_LIST | `0x13` | App -> Device | — | `[0x00][bitmap:1B]` |
 | FP_MATCH_ACK | `0x22` | App -> Device | — | `[0x00]` |
 
-The fingerprint slot bitmap covers slots `0–28` (29 templates max).
+The fingerprint slot bitmap is one byte covering 6 slots: `0–4` are
+authentication fingerprints, slot `5` is the dedicated **host-switch
+fingerprint** (dual-host, firmware 1.7+). The switch fingerprint only switches
+the active host; it never unlocks or authorizes anything.
 
 ### ECDH Pairing
 
@@ -121,13 +140,41 @@ The fingerprint slot bitmap covers slots `0–28` (29 templates max).
 
 **Pairing is button-gated.** `PAIR_INIT` does not start ECDH immediately:
 
-1. App sends `PAIR_INIT`. If the device already holds fingerprints it replies `[0x30][0xF1]` (a factory reset is required first).
+1. App sends `PAIR_INIT`. If the device already holds fingerprints **and this
+   is not a second-host registration** (see below) it replies `[0x30][0xF1]`
+   (a factory reset is required first).
 2. Otherwise the device replies `[0x30][0xF0]` (WAIT_BUTTON), blinks its LED, and opens a 30-second window.
 3. The user **short-presses the physical button** on the device to confirm. The device emits a `PAIR_BUTTON` notification (`0x34`, status `0x01`) and starts ECDH key generation (~2 s, deferred via TMOS events).
 4. The device sends its compressed public key asynchronously as `[0x30][compressed_pubkey:33B]`.
 5. App sends `PAIR_CONFIRM` with its own compressed public key; the device computes the shared secret (~2 s, deferred) and replies `[0x31][status]`.
 
 A 30-second timeout or a long press aborts the wait (see `PAIR_BUTTON` below). See [security.md](security.md) for the full key-derivation flow.
+
+**Second-host registration** (dual-host, firmware 1.7+): when the device's
+active slot is empty but the other slot is already claimed, `PAIR_INIT` opens a
+two-factor gate instead of demanding a factory reset — the user first touches
+an **already-enrolled fingerprint** (proves ownership; `PAIR_BUTTON` status
+`0x03`), then presses the button (proves presence). The flow then continues
+from step 3. Apps should call `SLOT_STATUS` before pairing to pick the right
+user guidance.
+
+### Dual-Host Slots (firmware 1.7+)
+
+The device maintains two independent host slots, each with its own BLE
+identity, bond, and pairing key. Touching the host-switch fingerprint (slot 5)
+switches the active slot; the current link drops and the other computer
+reconnects automatically.
+
+| Command | Code | Direction | Payload | Response |
+|---------|------|-----------|---------|----------|
+| SLOT_STATUS | `0x39` | App -> Device | — | `[0x39][0x00][bitmap:1B][active:1B]` |
+| SLOT_CLEAR | `0x3C` | App -> Device | `[slot:1B]` | `[0x00]` or `[0x11]` (FP-gated) |
+
+- `SLOT_STATUS` is allowed pre-pairing — a connecting host uses it to learn
+  whether it is the first or second host.
+- `SLOT_CLEAR` unbinds the **other** host's slot: it clears that slot's pairing
+  key, reclaims its BLE bond, and leaves the caller's slot and connection
+  untouched (no reboot). Requires a touch from an enrolled fingerprint.
 
 ### Key Storage (SSH / OTP / API)
 
@@ -180,9 +227,13 @@ Sent during fingerprint enrollment to report status.
 | PROCESSING | `0x02` | Processing template |
 | LIFT_FINGER | `0x03` | Lift and re-place finger |
 | COMPLETE | `0x04` | Enrollment complete |
+| OVERLAP | `0x06` | Capture overlapped the previous one too much — shift the finger and press again (progress does not advance) |
 | FAILED | `0xFF` | Enrollment failed |
 
-**Twelve captures** are required per enrollment, prompted at guided angles (4 centered, 3 left, 3 right, 1 up, 1 down).
+**Six captures** are required per enrollment, prompted at guided positions
+(center, left, right, fingertip, base, center again). The sensor's mode-1
+enrollment rejects captures that overlap a previous one, which forces broad
+coverage of the finger.
 
 ### Lock Request (`0x23`)
 
@@ -190,7 +241,10 @@ Sent during fingerprint enrollment to report status.
 [0x23]    (1 byte, no payload)
 ```
 
-Sent when the user long-presses the device button to request a screen lock. The app decides based on the current screen state: if already locked it is ignored (it may follow a `0x21` unlock notification); if unlocked it triggers a system lock.
+Sent when the user **holds a finger on the sensor for ~1 second** to request a
+screen lock. The app decides based on the current screen state: if already
+locked it is ignored (it may follow a `0x21` unlock notification); if unlocked
+it triggers a system lock.
 
 ### Pair Button (`0x34`)
 
@@ -203,6 +257,7 @@ Sent when the user long-presses the device button to request a screen lock. The 
 | `0x00` | 30-second wait timed out — pairing aborted |
 | `0x01` | Button pressed — ECDH key exchange starting |
 | `0x02` | Long press — user cancelled pairing |
+| `0x03` | Enrolled fingerprint confirmed — second-host registration advances to the button step |
 
 ### Connection Parameter Update (`0xF0`)
 
@@ -245,7 +300,12 @@ Supervision Timeout > Interval Max × (Slave Latency + 1) × 3
 6000 ms > 50 ms × 30 × 3 = 4500 ms  ✓
 ```
 
-Parameter update is requested 30 s after connection (after macOS completes service discovery).
+Parameter update is requested 30 s after connection (after macOS completes
+service discovery). Recent macOS releases (26/27) may override the requested
+parameters with their own (observed: 15 ms interval, latency 22, 2 s
+supervision timeout). Before long on-device crypto operations (ECDSA signing,
+key generation) the firmware therefore re-requests a link with latency 20 and
+a 6 s supervision timeout so the operation cannot outlive the timeout.
 
 ---
 
