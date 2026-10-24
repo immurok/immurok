@@ -12,6 +12,9 @@ dist/
 *.a
 *.d
 *.su
+# *.d above targets C dependency files; systemd drop-in directories share the
+# suffix and must stay tracked.
+!**/tmpfiles.d/
 
 # === App (macOS / Swift) ===
 app-macos/.build/
@@ -60,3 +63,22 @@ xcuserdata/
 
 # Superpowers brainstorming mockups
 .superpowers/
+
+# 硬件 3D 源文件（体积大，不入 git，sync-github 亦排除）
+hardware/3D-no-git/
+
+# npm 临时装的 CLI（claude 包），不属于本仓库
+/package.json
+/package-lock.json
+
+# 本地 worktree
+.worktrees/
+
+# Claude Code worktrees and superpowers scratch
+.claude/worktrees/
+.superpowers/
+
+# shop/rates: 4PX 报价表与 Shopify token 不入库
+shop/rates/in/*.xlsx
+shop/rates/.env
+shop/rates/.pytest_cache/

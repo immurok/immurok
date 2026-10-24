@@ -92,6 +92,7 @@ The status code in the second byte of a `PAIR_INIT` response is the pairing-spec
 |---------|------|-----------|---------|----------|
 | GET_STATUS | `0x01` | App -> Device | — | see below |
 | GET_BATT_RAW | `0x02` | App -> Device | — | `[0x00][mv_lo:1B][mv_hi:1B][pct:1B][adc_lo:1B][adc_hi:1B]` |
+| GET_CONN_PARAMS | `0x03` | App -> Device | — | `[0x03][0x00][interval:2B BE][latency:2B BE][timeout:2B BE]` — the link-layer values currently in effect (not the PPCP wish). Allowed before pairing. |
 | AUTH_REQUEST | `0x33` | App -> Device | — | `[0x11]` (wait for fingerprint) |
 | FACTORY_RESET | `0x36` | App -> Device | — | `[0x00]` or `[0x11]` (FP-gated) |
 | GATE_CANCEL | `0x37` | App -> Device | — | `[0x00]` (cancels a pending FP-gated command) |
@@ -134,8 +135,8 @@ the active host; it never unlocks or authorizes anything.
 
 | Command | Code | Direction | Payload | Response |
 |---------|------|-----------|---------|----------|
-| PAIR_INIT | `0x30` | App -> Device | — | `[0x30][0xF0]` (WAIT_BUTTON) or `[0x30][0xF1]` (NEEDS_RESET) |
-| PAIR_CONFIRM | `0x31` | App -> Device | `[app_pubkey:33B]` | Async: `[0x31][status:1B]` |
+| PAIR_INIT | `0x30` | App -> Device | — | `[0x30][0xF0]` (WAIT_BUTTON), `[0x30][0xF1]` (NEEDS_RESET); later `[0x30][pubkey:33B]` or `[0x30][0xFF]` (ECDH aborted, see below) |
+| PAIR_CONFIRM | `0x31` | App -> Device | `[app_pubkey:33B]` | Async: `[0x31][status:1B]`; `[0x31][0xFF]` = ECDH aborted |
 | PAIR_STATUS | `0x32` | App -> Device | — | `[0x32][paired:1B]` |
 
 **Pairing is button-gated.** `PAIR_INIT` does not start ECDH immediately:
@@ -149,6 +150,14 @@ the active host; it never unlocks or authorizes anything.
 5. App sends `PAIR_CONFIRM` with its own compressed public key; the device computes the shared secret (~2 s, deferred) and replies `[0x31][status]`.
 
 A 30-second timeout or a long press aborts the wait (see `PAIR_BUTTON` below). See [security.md](security.md) for the full key-derivation flow.
+
+**`[0x30][0xFF]` / `[0x31][0xFF]` — ECDH aborted.** The ~2 s ECC computation
+only runs when the link's supervision timeout is long enough to survive it
+(the device asks the central for 6 s at `PAIR_INIT` and again before the
+computation). If 5 s after the button press the timeout is still too short,
+or key generation itself fails, the device answers the stage's command byte
+with `0xFF` instead of a bare `0xE1` (which the button-wait stage would drop).
+Apps should tell the user to reconnect the device and link again.
 
 **Second-host registration** (dual-host, firmware 1.7+): when the device's
 active slot is empty but the other slot is already claimed, `PAIR_INIT` opens a
